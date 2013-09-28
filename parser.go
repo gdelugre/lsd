@@ -16,6 +16,12 @@ const sexprOpen = '('
 const sexprClose = ')'
 const endOfLine = '\n'
 
+// Structure returned when a parsing error occurs.
+type ParserError struct {
+	message string
+	lineNumber uint
+}
+
 // Interface for representing a generic element in a S-expr.
 type selfValue interface {
 	String(int) string
@@ -28,6 +34,7 @@ type selfString string
 type selfNode struct {
 	head   selfString
 	values []selfValue
+	root bool
 }
 
 // Holds the parser state.
@@ -47,12 +54,17 @@ type parseFunc func() (selfValue, error)
 
 // Converts a selfString into a printable string.
 func (s selfString) String(_ int) string {
-	return string(s)
+	if len(s) == 0 {
+		return "[]"
+	} else if strings.ContainsAny(string(s), "`#;\\([{}])") {
+		return "`" + strings.Replace(string(s), "`", "``", -1) + "`"
+	} else {
+		return string(s)
+	}
 }
 
-// Root node has no head by convention.
 func (node selfNode) isRoot() bool {
-	return len(node.head) == 0
+	return node.root
 }
 
 // Converts a selfNode into a printable string with indentation.
@@ -148,7 +160,7 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 		prev rune   = -1
 	)
 
-	for {
+	for !p.eod {
 		if p.r != '`' && prev == '`' {
 			break
 		}
@@ -166,7 +178,39 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 		p.next()
 	}
 
-	return selfString(str), nil
+	if p.eod {
+		return "", errors.New("Unexpected end of data while parsing string")
+	} else {
+		return selfString(str), nil
+	}
+}
+
+func (p *selfParser) parseBracketedString() (selfString, error) {
+	level := 1
+	str := ""
+
+	for !p.eod {
+		if p.r == ']' {
+			level--
+			if level == 0 {
+				p.next()
+				break
+			}
+		}
+
+		if p.r == '[' {
+			level++
+		}
+
+		str += string(p.r)
+		p.next()
+	}
+
+	if p.eod {
+		return "", errors.New("Unexpected end of data while parsing string")
+	} else {
+		return selfString(str), nil
+	}
 }
 
 func (p *selfParser) parseString() (selfString, error) {
@@ -181,7 +225,8 @@ func (p *selfParser) parseString() (selfString, error) {
 		p.next()
 		return p.parseBacktickString()
 	case '[':
-		panic("parseBracketedString: todo")
+		p.next()
+		return p.parseBracketedString()
 	default:
 		for isStringChar(p.r) {
 			str += string(p.r)
