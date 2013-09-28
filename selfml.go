@@ -22,7 +22,7 @@ func LoadString(data string, out interface{}) (err error) {
 
 	v := reflect.ValueOf(out)
 	if v.Kind() != reflect.Ptr && v.Elem().Kind() != reflect.Struct {
-		return errors.New("Expected pointer to a struct")
+		return errors.New("loadFile/loadString expects a pointer to a struct")
 	}
 
 	return rootNode.packToStructByFieldName(v.Elem())

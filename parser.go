@@ -5,7 +5,7 @@
 package selfml
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -17,7 +17,7 @@ const sexprClose = ')'
 const endOfLine = '\n'
 
 // Structure returned when a parsing error occurs.
-type ParserError struct {
+type parserError struct {
 	message string
 	lineNumber uint
 }
@@ -50,7 +50,24 @@ type selfParser struct {
 // Returned value after parsing a self-ml string.
 type Tree map[string]interface{}
 
+// Generic type function for parsing selfValue.
 type parseFunc func() (selfValue, error)
+
+// Error printing.
+func (err *parserError) Error() string {
+	return fmt.Sprintf("Error while parsing self-ml: %s (line %d)", err.message, err.lineNumber)
+}
+
+// Error generator.
+func (p *selfParser) newError(str string) error {
+	return &parserError{message: str, lineNumber: p.lineNumber}
+}
+
+// Error generator.
+// Overrides current line number of parser.
+func (p *selfParser) newErrorAtLine(str string, lineNum uint) error {
+	return &parserError{message: str, lineNumber: lineNum}
+}
 
 // Converts a selfString into a printable string.
 func (s selfString) String(_ int) string {
@@ -63,6 +80,8 @@ func (s selfString) String(_ int) string {
 	}
 }
 
+// Root node has special properties.
+// It can only contain subnodes and must not start or end with S-expr delimitors.
 func (node selfNode) isRoot() bool {
 	return node.root
 }
@@ -158,6 +177,7 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 	var (
 		str  string = ""
 		prev rune   = -1
+		lineNum uint = p.lineNumber
 	)
 
 	for !p.eod {
@@ -179,7 +199,7 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 	}
 
 	if p.eod {
-		return "", errors.New("Unexpected end of data while parsing string")
+		return "", p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
 	} else {
 		return selfString(str), nil
 	}
@@ -188,6 +208,7 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 func (p *selfParser) parseBracketedString() (selfString, error) {
 	level := 1
 	str := ""
+	lineNum := p.lineNumber
 
 	for !p.eod {
 		if p.r == ']' {
@@ -207,7 +228,7 @@ func (p *selfParser) parseBracketedString() (selfString, error) {
 	}
 
 	if p.eod {
-		return "", errors.New("Unexpected end of data while parsing string")
+		return "", p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
 	} else {
 		return selfString(str), nil
 	}
@@ -217,7 +238,7 @@ func (p *selfParser) parseString() (selfString, error) {
 	var str string = ""
 
 	if p.eod {
-		return "", errors.New("eod")
+		return "", p.newError("unexpected end of data")
 	}
 
 	switch p.r {
@@ -251,7 +272,7 @@ func (p *selfParser) parseNodeBody(rootNode bool) (values []selfValue, err error
 		} else if !rootNode {
 			parseValue = func() (selfValue, error) { return p.parseString() }
 		} else {
-			return nil, errors.New("Unexpected string in root node")
+			return nil, p.newError("Unexpected string in root node")
 		}
 
 		if v, err = parseValue(); err != nil {
@@ -275,7 +296,7 @@ func (p *selfParser) parseNode() (node *selfNode, err error) {
 
 	p.skipSpaces()
 	if p.r != sexprOpen {
-		return nil, errors.New("expected ( char")
+		return nil, p.newError("expected `(` rune at start of list")
 	}
 	p.next()
 
