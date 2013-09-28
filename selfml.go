@@ -13,12 +13,12 @@ import (
 // Parses a self-ml string and fills the output structure.
 func LoadString(data string, out interface{}) (err error) {
 	p := selfParser{input: data, r: '\n'}
-	rootNode := selfNode{root: true}
+	rootNode := selfNode{root: true, head: selfString{str:"root"}}
 	if rootNode.values, err = p.parseNodeBody(true); err != nil {
 		return
 	}
 
-	println(rootNode.String(0))
+	println(rootNode.Dump(0))
 
 	v := reflect.ValueOf(out)
 	if v.Kind() != reflect.Ptr && v.Elem().Kind() != reflect.Struct {

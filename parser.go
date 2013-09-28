@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+	"reflect"
 )
 
 // Tokens for opening and closing a S-expr.
@@ -24,16 +25,23 @@ type parserError struct {
 
 // Interface for representing a generic element in a S-expr.
 type selfValue interface {
-	String(int) string
+	newPackError(string) error
+	packIntoField(string, reflect.Value) error
+	Dump(int) string
+	LineNumber() uint
 }
 
 // String value in a S-expr.
-type selfString string
+type selfString struct {
+	str string
+	lineNumber uint
+}
 
 // S-expr value in a S-expr, must start with a selfString.
 type selfNode struct {
 	head   selfString
 	values []selfValue
+	lineNumber uint
 	root bool
 }
 
@@ -69,14 +77,19 @@ func (p *selfParser) newErrorAtLine(str string, lineNum uint) error {
 	return &parserError{message: str, lineNumber: lineNum}
 }
 
+// Getter for the real string value of a selfString.
+func (s selfString) String() string {
+	return s.str
+}
+
 // Converts a selfString into a printable string.
-func (s selfString) String(_ int) string {
-	if len(s) == 0 {
+func (s selfString) Dump(_ int) string {
+	if len(s.str) == 0 {
 		return "[]"
-	} else if strings.ContainsAny(string(s), "`#;\\([{}])") {
-		return "`" + strings.Replace(string(s), "`", "``", -1) + "`"
+	} else if strings.ContainsAny(s.str, "`#;\\([{}])") {
+		return "`" + strings.Replace(s.str, "`", "``", -1) + "`"
 	} else {
-		return string(s)
+		return s.str
 	}
 }
 
@@ -87,17 +100,17 @@ func (node selfNode) isRoot() bool {
 }
 
 // Converts a selfNode into a printable string with indentation.
-func (node selfNode) String(indent int) (str string) {
+func (node selfNode) Dump(indent int) (str string) {
 	// Root node needs no delimitors
 	if !node.isRoot() {
-		str += string(sexprOpen) + node.head.String(indent)
+		str += string(sexprOpen) + node.head.Dump(indent)
 	} else {
 		indent -= 1
 	}
 
 	if len(node.values) > 0 {
 		for _, v := range node.values {
-			str += "\n" + strings.Repeat("    ", indent+1) + v.String(indent+1)
+			str += "\n" + strings.Repeat("    ", indent+1) + v.Dump(indent+1)
 		}
 	}
 
@@ -112,7 +125,7 @@ func (node *selfNode) getNodeByName(name string) *selfNode {
 		switch n.(type) {
 		case selfNode:
 			subNode := n.(selfNode)
-			if string(subNode.head) == name {
+			if subNode.head.String() == name {
 				return &subNode
 			}
 		}
@@ -120,6 +133,7 @@ func (node *selfNode) getNodeByName(name string) *selfNode {
 	return nil
 }
 
+// Decode the next rune in the stream.
 func (p *selfParser) next() {
 	p.pos += p.runeWidth
 	if p.pos >= len(p.input) {
@@ -157,12 +171,14 @@ func isStringChar(r rune) bool {
 	}
 }
 
+// Move until the next line in the stream.
 func (p *selfParser) skipLine() {
 	for !p.eod && p.r != endOfLine {
 		p.next()
 	}
 }
 
+// Skip any spaces, including comments, in the stream.
 func (p *selfParser) skipSpaces() {
 	for !p.eod && (isComment(p.r) || isSpace(p.r)) {
 		if isComment(p.r) {
@@ -173,6 +189,8 @@ func (p *selfParser) skipSpaces() {
 	}
 }
 
+// Parses a string value enclosed by '`' delimitors.
+// Double backticks are escaped as a single one.
 func (p *selfParser) parseBacktickString() (selfString, error) {
 	var (
 		str  string = ""
@@ -199,12 +217,14 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 	}
 
 	if p.eod {
-		return "", p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
+		return selfString{}, p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
 	} else {
-		return selfString(str), nil
+		return selfString{str: str, lineNumber: lineNum}, nil
 	}
 }
 
+// Parses a string enclosed into brackets.
+// Brackets are authorized inside the string as long as they're balanced.
 func (p *selfParser) parseBracketedString() (selfString, error) {
 	level := 1
 	str := ""
@@ -228,17 +248,18 @@ func (p *selfParser) parseBracketedString() (selfString, error) {
 	}
 
 	if p.eod {
-		return "", p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
+		return selfString{}, p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
 	} else {
-		return selfString(str), nil
+		return selfString{str: str, lineNumber: lineNum}, nil
 	}
 }
 
 func (p *selfParser) parseString() (selfString, error) {
 	var str string = ""
+	lineNum := p.lineNumber
 
 	if p.eod {
-		return "", p.newError("unexpected end of data")
+		return selfString{}, p.newError("unexpected end of data")
 	}
 
 	switch p.r {
@@ -255,7 +276,7 @@ func (p *selfParser) parseString() (selfString, error) {
 		}
 	}
 
-	return selfString(str), nil
+	return selfString{str: str, lineNumber: lineNum}, nil
 }
 
 func (p *selfParser) parseNodeBody(rootNode bool) (values []selfValue, err error) {
@@ -292,7 +313,10 @@ func (p *selfParser) parseNodeBody(rootNode bool) (values []selfValue, err error
 }
 
 func (p *selfParser) parseNode() (node *selfNode, err error) {
-	var nodeName selfString
+	var (
+		nodeName selfString
+		lineNum = p.lineNumber
+	)
 
 	p.skipSpaces()
 	if p.r != sexprOpen {
@@ -305,7 +329,7 @@ func (p *selfParser) parseNode() (node *selfNode, err error) {
 		return nil, err
 	}
 
-	node = &selfNode{head: nodeName}
+	node = &selfNode{head: nodeName, lineNumber: lineNum}
 	if node.values, err = p.parseNodeBody(false); err != nil {
 		return nil, err
 	}
