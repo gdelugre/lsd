@@ -6,20 +6,23 @@ package selfml
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-	"reflect"
 )
 
 // Tokens for opening and closing a S-expr.
 const sexprOpen = '('
 const sexprClose = ')'
+
+// End of line and white characters.
 const endOfLine = '\n'
+const whiteSpaces = "\t\r\n\f\u00a0\u0085"
 
 // Structure returned when a parsing error occurs.
 type parserError struct {
-	message string
+	message    string
 	lineNumber uint
 }
 
@@ -33,16 +36,16 @@ type selfValue interface {
 
 // String value in a S-expr.
 type selfString struct {
-	str string
+	str        string
 	lineNumber uint
 }
 
 // S-expr value in a S-expr, must start with a selfString.
 type selfNode struct {
-	head   selfString
-	values []selfValue
+	head       selfString
+	values     []selfValue
 	lineNumber uint
-	root bool
+	root       bool
 }
 
 // Holds the parser state.
@@ -86,7 +89,7 @@ func (s selfString) String() string {
 func (s selfString) Dump(_ int) string {
 	if len(s.str) == 0 {
 		return "[]"
-	} else if strings.ContainsAny(s.str, "`#;\\([{}])") {
+	} else if strings.ContainsAny(s.str, whiteSpaces+"`#;\\([{}])") {
 		return "`" + strings.Replace(s.str, "`", "``", -1) + "`"
 	} else {
 		return s.str
@@ -193,9 +196,9 @@ func (p *selfParser) skipSpaces() {
 // Double backticks are escaped as a single one.
 func (p *selfParser) parseBacktickString() (selfString, error) {
 	var (
-		str  string = ""
-		prev rune   = -1
-		lineNum uint = p.lineNumber
+		str     string = ""
+		prev    rune   = -1
+		lineNum uint   = p.lineNumber
 	)
 
 	for !p.eod {
@@ -315,7 +318,7 @@ func (p *selfParser) parseNodeBody(rootNode bool) (values []selfValue, err error
 func (p *selfParser) parseNode() (node *selfNode, err error) {
 	var (
 		nodeName selfString
-		lineNum = p.lineNumber
+		lineNum  = p.lineNumber
 	)
 
 	p.skipSpaces()
