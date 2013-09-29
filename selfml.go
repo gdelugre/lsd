@@ -18,8 +18,6 @@ func LoadString(data string, out interface{}) (err error) {
 		return
 	}
 
-	println(rootNode.Dump(0))
-
 	v := reflect.ValueOf(out)
 	if v.Kind() != reflect.Ptr && v.Elem().Kind() != reflect.Struct {
 		return errors.New("loadFile/loadString expects a pointer to a struct")

@@ -106,7 +106,7 @@ func (node selfNode) isRoot() bool {
 func (node selfNode) Dump(indent int) (str string) {
 	// Root node needs no delimitors
 	if !node.isRoot() {
-		str += string(sexprOpen) + node.head.Dump(indent)
+		str = string(sexprOpen) + node.head.Dump(indent)
 	} else {
 		indent -= 1
 	}
@@ -114,12 +114,16 @@ func (node selfNode) Dump(indent int) (str string) {
 	if len(node.values) > 0 {
 		for _, v := range node.values {
 			str += "\n" + strings.Repeat("    ", indent+1) + v.Dump(indent+1)
+			if node.isRoot() {
+				str += "\n"
+			}
 		}
 	}
 
 	if !node.isRoot() {
-		str += string(sexprClose) + "\n"
+		str += string(sexprClose)
 	}
+
 	return
 }
 

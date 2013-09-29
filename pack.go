@@ -231,9 +231,6 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 	sliceType := field.Type().Elem()
 	sliceKind := sliceType.Kind()
 
-	println(sliceType.String())
-	println(sliceKind.String())
-
 	var value reflect.Value
 	for _, n := range node.values {
 
@@ -302,7 +299,6 @@ func (node *selfNode) packToStructByFieldName(st reflect.Value) (err error) {
 			return valueNode.newPackError("undefined field `" + fieldName + "` for node `" + nodeName + "`")
 		}
 
-		println(fieldName)
 		if err = valueNode.packIntoField(fieldName, targetField); err != nil {
 			return
 		}
