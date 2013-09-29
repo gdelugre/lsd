@@ -13,7 +13,7 @@ import (
 // Parses a self-ml string and fills the output structure.
 func LoadString(data string, out interface{}) (err error) {
 	p := selfParser{input: data, r: '\n'}
-	rootNode := selfNode{root: true, head: selfString{str:"root"}}
+	rootNode := selfNode{root: true, head: selfString{str: "root"}}
 	if rootNode.values, err = p.parseNodeBody(true); err != nil {
 		return
 	}

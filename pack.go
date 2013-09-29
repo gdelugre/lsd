@@ -13,7 +13,7 @@ import (
 
 // Error type that can be triggered while packing values.
 type packError struct {
-	message string
+	message    string
 	lineNumber uint
 }
 
@@ -55,8 +55,31 @@ func publicName(fieldName string) string {
 	}
 }
 
+// Checks whether a kind can be packed as a single scalar value.
+func isScalarKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map,
+		reflect.Ptr, reflect.UnsafePointer, reflect.Complex64, reflect.Complex128,
+		reflect.Struct, reflect.Slice, reflect.Array:
+		return false
+
+	default:
+		return true
+	}
+}
+
+// Checks whether a kind represents a compound type.
+func isCompoundKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Array, reflect.Slice, reflect.Struct:
+		return true
+	default:
+		return false
+	}
+}
+
 // Converts a string to its native non-compound Go type.
-func (str selfString) encodeScalarField(name string, kind reflect.Kind) (interface{}, error) {
+func (str selfString) encodeScalarField(kind reflect.Kind) (interface{}, error) {
 	var item interface{}
 
 	repr := str.String()
@@ -65,79 +88,79 @@ func (str selfString) encodeScalarField(name string, kind reflect.Kind) (interfa
 		item = repr
 	case reflect.Bool:
 		if b, err := strconv.ParseBool(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = b
 		}
 	case reflect.Int:
 		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = int(i)
 		}
 	case reflect.Int8:
 		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = int8(i)
 		}
 	case reflect.Int16:
 		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = int16(i)
 		}
 	case reflect.Int32:
 		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = int32(i)
 		}
 	case reflect.Int64:
 		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = int64(i)
 		}
 	case reflect.Uint:
 		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = uint(i)
 		}
 	case reflect.Uint8:
 		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = uint8(i)
 		}
 	case reflect.Uint16:
 		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = uint16(i)
 		}
 	case reflect.Uint32:
 		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = uint32(i)
 		}
 	case reflect.Uint64:
 		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = uint64(i)
 		}
 	case reflect.Float32:
 		if f, err := strconv.ParseFloat(repr, 32); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = float32(f)
 		}
 	case reflect.Float64:
 		if f, err := strconv.ParseFloat(repr, 64); err != nil {
-			return nil, str.newPackError("Cannot convert field " + name + " to type " + kind.String())
+			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = f
 		}
@@ -146,62 +169,121 @@ func (str selfString) encodeScalarField(name string, kind reflect.Kind) (interfa
 	return item, nil
 }
 
+// Packs a selfNode into a Go structure field.
+// If fhe field is a scalar type, process it with encodeScalarField.
+// If the field is a structure, process it with packToStruct.
 func (node selfNode) packIntoField(name string, field reflect.Value) (err error) {
 	var item interface{}
 
 	fieldKind := field.Kind()
 
-	switch fieldKind {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Complex64, reflect.Complex128:
-		return node.newPackError("Unsupported field kind: " + fieldKind.String())
-
-	case reflect.Struct:
-		if err = node.packToStruct(field); err != nil {
-			return
-		}
-
-	case reflect.Slice:
-		sliceType := field.Type().Elem()
-		println(sliceType.String())
-		return node.newPackError("fuckyou slice")
-
-	default:
+	if isScalarKind(fieldKind) {
 		if len(node.values) != 1 {
-			return node.newPackError("Bad number of values for scalar field " + name)
+			return node.newPackError("bad number of values for scalar field `" + name + "`")
 		}
 		if _, ok := node.values[0].(selfString); !ok {
-			return node.newPackError("Expected a string element for scalar field " + name)
+			return node.newPackError("expected a string element for scalar field `" + name + "`")
 		}
 		strValue := node.values[0].(selfString)
 
-		if item, err = strValue.encodeScalarField(name, fieldKind); err != nil {
+		if item, err = strValue.encodeScalarField(fieldKind); err != nil {
 			return
 		}
-
 		field.Set(reflect.ValueOf(item))
+
+	} else if fieldKind == reflect.Struct {
+		return node.packToStruct(field)
+
+	} else if fieldKind == reflect.Slice {
+		return node.packToSlice(field)
+
+	} else {
+		return node.newPackError("unsupported field kind " + fieldKind.String())
 	}
 
 	return
 }
 
+// Packs a selfString into a Go structure field.
+// The field type must be scalar to hold the value.
 func (str selfString) packIntoField(name string, field reflect.Value) (err error) {
 	var item interface{}
 	fieldKind := field.Kind()
 
-	switch fieldKind {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Complex64, reflect.Complex128:
-		return str.newPackError("Unsupported field kind: " + fieldKind.String())
-
-	case reflect.Struct, reflect.Slice, reflect.Array:
-		return str.newPackError("Cannot pack string `" + str.String() + "` into field of compound kind " + fieldKind.String())
-
-	default:
-		if item, err = str.encodeScalarField(name, fieldKind); err != nil {
+	if isScalarKind(fieldKind) {
+		if item, err = str.encodeScalarField(fieldKind); err != nil {
 			return
 		}
 		field.Set(reflect.ValueOf(item))
+
+	} else if isCompoundKind(fieldKind) {
+		return str.newPackError("cannot pack string `" + str.String() + "` into field of compound kind " + fieldKind.String())
+
+	} else {
+		return str.newPackError("unsupported field kind " + fieldKind.String())
 	}
+
 	return
+}
+
+// Packs a selfNode into a Go slice.
+func (node selfNode) packToSlice(field reflect.Value) error {
+	sliceType := field.Type().Elem()
+	sliceKind := sliceType.Kind()
+
+	println(sliceType.String())
+	println(sliceKind.String())
+
+	var value reflect.Value
+	for _, n := range node.values {
+
+		// Packing a slice of scalars.
+		if isScalarKind(sliceKind) {
+			if _, ok := n.(selfString); !ok {
+				return node.newPackError("expected a string element for scalar field in slice")
+			}
+			if item, err := n.(selfString).encodeScalarField(sliceKind); err != nil {
+				return err
+			} else {
+				value = reflect.ValueOf(item)
+			}
+
+		// Packing a slice of slices. Requires the [] (empty string) header.
+		} else if sliceKind == reflect.Slice {
+			if _, ok := n.(*selfNode); !ok {
+				return n.newPackError("slice type expected a list of values")
+			}
+			subNode := n.(*selfNode)
+			if len(subNode.head.String()) != 0 {
+				return subNode.head.newPackError("slice head has value `" + subNode.head.String() + "` instead of []")
+			}
+			value = reflect.New(sliceType).Elem()
+			if err := subNode.packToSlice(value); err != nil {
+				return err
+			}
+
+		// Packing a slice of structs. Requires the struct name as header.
+		} else if sliceKind == reflect.Struct {
+			if _, ok := n.(*selfNode); !ok {
+				return n.newPackError("struct type expected a list of values")
+			}
+			subNode := n.(*selfNode)
+			if subNode.head.String() != sliceType.Name() {
+				return subNode.head.newPackError("struct head has value `" + subNode.head.String() + "` instead of `" + sliceType.Name() + "`")
+			}
+			value = reflect.New(sliceType).Elem()
+			if err := subNode.packToStruct(value); err != nil {
+				return err
+			}
+
+		} else {
+			return node.newPackError("unsupported slice type: " + sliceType.Name())
+		}
+
+		field.Set(reflect.Append(field, value))
+	}
+
+	return nil
 }
 
 // Packs a selfNode into a Go structure.
@@ -211,13 +293,13 @@ func (node *selfNode) packToStructByFieldName(st reflect.Value) (err error) {
 	for _, n := range node.values {
 		nodeName := node.head.String()
 		if _, ok := n.(*selfNode); !ok {
-			return node.newPackError("Field `" + nodeName + "` should be only made of lists")
+			return node.newPackError("field `" + nodeName + "` should be only made of lists")
 		}
 		valueNode := n.(*selfNode)
 		fieldName := publicName(valueNode.head.String())
 		targetField := st.FieldByName(fieldName)
 		if !targetField.IsValid() {
-			return valueNode.newPackError("Undefined field `" + fieldName + "` for node `" + nodeName + "`")
+			return valueNode.newPackError("undefined field `" + fieldName + "` for node `" + nodeName + "`")
 		}
 
 		println(fieldName)
@@ -235,15 +317,15 @@ func (node *selfNode) packToStructByFieldOrder(st reflect.Value) (err error) {
 
 	typeName := st.Type().Name()
 	if st.NumField() < len(node.values) {
-		return node.newPackError("Too many values to fit into struct " + typeName)
+		return node.newPackError("too many values to fit into struct " + typeName)
 	}
 
 	nodeName := node.head.String()
 	if typeName != nodeName {
-		return node.newPackError("Bad value `" + nodeName + "`, expected `" + typeName + "`")
+		return node.newPackError("bad value `" + nodeName + "`, expected `" + typeName + "`")
 	}
 
-	for i,n := range node.values {
+	for i, n := range node.values {
 		targetField := st.Field(i)
 		if err = n.packIntoField("", targetField); err != nil {
 			return
