@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Error type that can be triggered while packing values.
@@ -76,6 +77,12 @@ func isCompoundKind(kind reflect.Kind) bool {
 	default:
 		return false
 	}
+}
+
+// Allowed node heads to be used as bullet points.
+func isBulletPoint(str string) bool {
+	r, _ := utf8.DecodeRuneInString(str)
+	return r == '-' || r == '*' || r == '•' || r == '◦' || r == '‣'
 }
 
 // Converts a string to its native non-compound Go type.
@@ -265,8 +272,9 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 				return n.newPackError("struct type expected a list of values")
 			}
 			subNode := n.(*selfNode)
-			if subNode.head.String() != sliceType.Name() {
-				return subNode.head.newPackError("struct head has value `" + subNode.head.String() + "` instead of `" + sliceType.Name() + "`")
+			subHead := subNode.head.String()
+			if !isBulletPoint(subHead) && subHead != sliceType.Name() {
+				return subNode.head.newPackError("struct head has value `" + subHead + "` instead of `" + sliceType.Name() + "`")
 			}
 			value = reflect.New(sliceType).Elem()
 			if err := subNode.packToStruct(value); err != nil {
@@ -317,7 +325,7 @@ func (node *selfNode) packToStructByFieldOrder(st reflect.Value) (err error) {
 	}
 
 	nodeName := node.head.String()
-	if typeName != nodeName {
+	if !isBulletPoint(nodeName) && typeName != nodeName {
 		return node.newPackError("bad value `" + nodeName + "`, expected `" + typeName + "`")
 	}
 
