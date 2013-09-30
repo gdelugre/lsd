@@ -58,9 +58,6 @@ type selfParser struct {
 	eod        bool
 }
 
-// Returned value after parsing a self-ml string.
-type Tree map[string]interface{}
-
 // Generic type function for parsing selfValue.
 type parseFunc func() (selfValue, error)
 

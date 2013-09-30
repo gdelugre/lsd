@@ -245,8 +245,8 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 				value = reflect.ValueOf(item)
 			}
 
-		// Packing a slice of slices. Requires the [] (empty string) header.
 		} else if sliceKind == reflect.Slice {
+			// Packing a slice of slices. Requires the [] (empty string) header.
 			if _, ok := n.(*selfNode); !ok {
 				return n.newPackError("slice type expected a list of values")
 			}
@@ -259,8 +259,8 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 				return err
 			}
 
-		// Packing a slice of structs. Requires the struct name as header.
 		} else if sliceKind == reflect.Struct {
+			// Packing a slice of structs. Requires the struct name as header.
 			if _, ok := n.(*selfNode); !ok {
 				return n.newPackError("struct type expected a list of values")
 			}
