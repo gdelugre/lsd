@@ -176,11 +176,10 @@ func (str selfString) encodeScalarField(kind reflect.Kind) (interface{}, error) 
 	return item, nil
 }
 
-// Packs a selfNode into a Go structure field.
+// Packs a selfNode into a Go structure/map field.
 // If fhe field is a scalar type, process it with encodeScalarField.
 // If the field is a structure, process it with packToStruct.
 func (node selfNode) packIntoField(name string, field reflect.Value) (err error) {
-	var item interface{}
 
 	fieldKind := field.Kind()
 
@@ -192,17 +191,17 @@ func (node selfNode) packIntoField(name string, field reflect.Value) (err error)
 			return node.newPackError("expected a string element for scalar field `" + name + "`")
 		}
 		strValue := node.values[0].(selfString)
-
-		if item, err = strValue.encodeScalarField(fieldKind); err != nil {
-			return
-		}
-		field.Set(reflect.ValueOf(item))
+		return strValue.packIntoField(name, field)
 
 	} else if fieldKind == reflect.Struct {
 		return node.packToStruct(field)
 
 	} else if fieldKind == reflect.Slice {
 		return node.packToSlice(field)
+
+	} else if fieldKind == reflect.Map {
+		field.Set(reflect.MakeMap(field.Type())) // Map requires initialization.
+		return node.packToMap(field)
 
 	} else {
 		return node.newPackError("unsupported field kind " + fieldKind.String())
@@ -211,49 +210,82 @@ func (node selfNode) packIntoField(name string, field reflect.Value) (err error)
 	return
 }
 
-// Packs a selfString into a Go structure field.
+// Packs a selfString into a Go structure/map field.
 // The field type must be scalar to hold the value.
-func (str selfString) packIntoField(name string, field reflect.Value) (err error) {
-	var item interface{}
-	fieldKind := field.Kind()
+func (str selfString) packIntoField(_ string, field reflect.Value) (err error) {
 
-	if isScalarKind(fieldKind) {
-		if item, err = str.encodeScalarField(fieldKind); err != nil {
+	var value reflect.Value
+	if value, err = str.makeValue(field.Type()); err != nil {
+		return
+	}
+
+	field.Set(value)
+	return
+}
+
+// Packs a selfString into a new allocated reflect.Value.
+// This value can later be set into a field or variable.
+func (str selfString) makeValue(t reflect.Type) (value reflect.Value, err error) {
+
+	var item interface{}
+	kind := t.Kind()
+	value = reflect.Zero(t)
+
+	if isScalarKind(kind) {
+		if item, err = str.encodeScalarField(kind); err != nil {
 			return
 		}
-		field.Set(reflect.ValueOf(item))
+		value = reflect.ValueOf(item)
 
-	} else if isCompoundKind(fieldKind) {
-		return str.newPackError("cannot pack string `" + str.String() + "` into field of compound kind " + fieldKind.String())
+	} else if isCompoundKind(kind) {
+		err = str.newPackError("cannot pack string `" + str.String() + "` into field of compound kind " + kind.String())
 
 	} else {
-		return str.newPackError("unsupported field kind " + fieldKind.String())
+		err = str.newPackError("unsupported field kind " + kind.String())
+	}
+
+	return
+}
+
+// Packs a selfNode into a new allocated reflect.Value.
+// This value can later be set into a field or variable.
+func (node selfNode) makeValue(t reflect.Type) (value reflect.Value, err error) {
+
+	kind := t.Kind()
+	value = reflect.Zero(t)
+
+	if isScalarKind(kind) {
+		err = node.newPackError("expected a string element for scalar field")
+
+	} else if kind == reflect.Slice {
+		value = reflect.New(t).Elem()
+		err = node.packToSlice(value)
+
+	} else if kind == reflect.Struct {
+		value = reflect.New(t).Elem()
+		err = node.packToStruct(value)
+
+	} else if kind == reflect.Map {
+		value = reflect.MakeMap(t)
+		err = node.packToMap(value)
+
+	} else {
+		err = node.newPackError("unsupported field kind " + kind.String())
 	}
 
 	return
 }
 
 // Packs a selfNode into a Go slice.
-func (node selfNode) packToSlice(field reflect.Value) error {
+func (node selfNode) packToSlice(field reflect.Value) (err error) {
 	sliceType := field.Type().Elem()
 	sliceKind := sliceType.Kind()
 
 	var value reflect.Value
 	for _, n := range node.values {
 
-		// Packing a slice of scalars.
-		if isScalarKind(sliceKind) {
-			if _, ok := n.(selfString); !ok {
-				return node.newPackError("expected a string element for scalar field in slice")
-			}
-			if item, err := n.(selfString).encodeScalarField(sliceKind); err != nil {
-				return err
-			} else {
-				value = reflect.ValueOf(item)
-			}
-
-		} else if sliceKind == reflect.Slice {
-			// Packing a slice of slices. Requires the [] (empty string) header.
+		if sliceKind == reflect.Slice {
+			// Packing a slice of slices requires the [] (empty string) header.
 			if _, ok := n.(*selfNode); !ok {
 				return n.newPackError("slice type expected a list of values")
 			}
@@ -261,28 +293,21 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 			if len(subNode.head.String()) != 0 {
 				return subNode.head.newPackError("slice head has value `" + subNode.head.String() + "` instead of []")
 			}
-			value = reflect.New(sliceType).Elem()
-			if err := subNode.packToSlice(value); err != nil {
-				return err
-			}
 
-		} else if sliceKind == reflect.Struct {
-			// Packing a slice of structs. Requires the struct name as header.
+		} else if sliceKind == reflect.Struct || sliceKind == reflect.Map {
+			// Packing a slice of structs or maps. Requires the type name as header or a bullet point.
 			if _, ok := n.(*selfNode); !ok {
-				return n.newPackError("struct type expected a list of values")
+				return n.newPackError("struct/map type expected a list of values")
 			}
 			subNode := n.(*selfNode)
 			subHead := subNode.head.String()
 			if !isBulletPoint(subHead) && subHead != sliceType.Name() {
-				return subNode.head.newPackError("struct head has value `" + subHead + "` instead of `" + sliceType.Name() + "`")
+				return subNode.head.newPackError("struct head has value `" + subHead + "` instead of bullet or `" + sliceType.Name() + "`")
 			}
-			value = reflect.New(sliceType).Elem()
-			if err := subNode.packToStruct(value); err != nil {
-				return err
-			}
+		}
 
-		} else {
-			return node.newPackError("unsupported slice type: " + sliceType.Name())
+		if value, err = n.makeValue(sliceType); err != nil {
+			return
 		}
 
 		field.Set(reflect.Append(field, value))
@@ -291,14 +316,46 @@ func (node selfNode) packToSlice(field reflect.Value) error {
 	return nil
 }
 
+// Packs a selfNode into a Go map.
+// Values must be nodes as their heads are used as keys into the map.
+func (node selfNode) packToMap(m reflect.Value) (err error) {
+
+	var (
+		key   interface{}
+		value reflect.Value
+	)
+
+	nodeName := node.head.String()
+	keyType, elemType := m.Type().Key(), m.Type().Elem()
+
+	for _, n := range node.values {
+		if _, ok := n.(*selfNode); !ok {
+			return n.newPackError("field `" + nodeName + "` should be only made of lists")
+		}
+		valueNode := n.(*selfNode)
+		nodeHead := valueNode.head
+		if key, err = nodeHead.encodeScalarField(keyType.Kind()); err != nil {
+			return
+		}
+
+		value = reflect.New(elemType).Elem()
+		if err = valueNode.packIntoField(nodeHead.String(), value); err != nil {
+			return
+		}
+
+		m.SetMapIndex(reflect.ValueOf(key), value)
+	}
+	return
+}
+
 // Packs a selfNode into a Go structure.
 // For each iterated member in the node, fills the corresponding structure field by name.
 func (node *selfNode) packToStructByFieldName(st reflect.Value) (err error) {
 
+	nodeName := node.head.String()
 	for _, n := range node.values {
-		nodeName := node.head.String()
 		if _, ok := n.(*selfNode); !ok {
-			return node.newPackError("field `" + nodeName + "` should be only made of lists")
+			return n.newPackError("field `" + nodeName + "` should be only made of lists")
 		}
 		valueNode := n.(*selfNode)
 		fieldName := publicName(valueNode.head.String())

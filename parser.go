@@ -30,6 +30,7 @@ type parserError struct {
 type selfValue interface {
 	newPackError(string) error
 	packIntoField(string, reflect.Value) error
+	makeValue(reflect.Type) (reflect.Value, error)
 	Dump(int) string
 	LineNumber() uint
 }
