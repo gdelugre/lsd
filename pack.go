@@ -85,6 +85,21 @@ func isBulletPoint(str string) bool {
 	return r == '-' || r == '*' || r == '•' || r == '◦' || r == '‣'
 }
 
+// Extended version of strconv.ParseBool.
+// Also accepts variations of "Yes" and "No" strings.
+func parseBoolEx(repr string) (value bool, err error) {
+	if value, err = strconv.ParseBool(repr); err != nil {
+		switch repr {
+		case "y", "yes", "YES", "Yes":
+			return true, nil
+		case "n", "no", "NO", "No":
+			return false, nil
+		}
+	}
+
+	return
+}
+
 // Converts a string to its native non-compound Go type.
 func (str selfString) encodeScalarField(kind reflect.Kind) (interface{}, error) {
 	var item interface{}
@@ -94,7 +109,7 @@ func (str selfString) encodeScalarField(kind reflect.Kind) (interface{}, error) 
 	case reflect.String:
 		item = repr
 	case reflect.Bool:
-		if b, err := strconv.ParseBool(repr); err != nil {
+		if b, err := parseBoolEx(repr); err != nil {
 			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
 		} else {
 			item = b
