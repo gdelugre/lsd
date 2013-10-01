@@ -87,7 +87,7 @@ func (s selfString) String() string {
 func (s selfString) Dump(_ int) string {
 	if len(s.str) == 0 {
 		return "[]"
-	} else if strings.ContainsAny(s.str, whiteSpaces+"`#;\\([{}])") {
+	} else if strings.ContainsAny(s.str, whiteSpaces+"`#;([])") {
 		return "`" + strings.Replace(s.str, "`", "``", -1) + "`"
 	} else {
 		return s.str
@@ -164,12 +164,12 @@ func isSpace(r rune) bool {
 }
 
 func isStringChar(r rune) bool {
-	if isSpace(r) {
+	if isSpace(r) || isComment(r) {
 		return false
 	}
 
 	switch r {
-	case '[', ']', '(', ')', '{', '}', '\\':
+	case '[', ']', '(', ')':
 		return false
 	default:
 		return true
