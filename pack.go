@@ -82,7 +82,7 @@ func isCompoundKind(kind reflect.Kind) bool {
 // Allowed node heads to be used as bullet points.
 func isBulletPoint(str string) bool {
 	r, _ := utf8.DecodeRuneInString(str)
-	return r == '-' || r == '*' || r == '•' || r == '◦' || r == '‣'
+	return r == '-' || r == '*' || r == '•' || r == '◦' || r == '‣' || r == '⁃'
 }
 
 // Extended version of strconv.ParseBool.
