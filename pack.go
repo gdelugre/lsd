@@ -85,6 +85,26 @@ func isBulletPoint(str string) bool {
 	return r == '-' || r == '*' || r == '•' || r == '◦' || r == '‣' || r == '⁃'
 }
 
+// Extended version of strconv.ParseInt.
+// Also accepts binary forms with "0b" prefix.
+func parseIntEx(s string, bitSize int) (int64, error) {
+	if s[0:2] == "0b" {
+		return strconv.ParseInt(s[2:], 2, bitSize)
+	} else {
+		return strconv.ParseInt(s, 0, bitSize)
+	}
+}
+
+// Extended version of strconv.ParseUint.
+// Also accepts binary forms with "0b" prefix.
+func parseUintEx(s string, bitSize int) (uint64, error) {
+	if s[0:2] == "0b" {
+		return strconv.ParseUint(s[2:], 2, bitSize)
+	} else {
+		return strconv.ParseUint(s, 0, bitSize)
+	}
+}
+
 // Extended version of strconv.ParseBool.
 // Also accepts variations of "Yes" and "No" strings.
 func parseBoolEx(repr string) (value bool, err error) {
@@ -114,66 +134,69 @@ func (str selfString) encodeScalarField(kind reflect.Kind) (interface{}, error) 
 		} else {
 			item = b
 		}
-	case reflect.Int:
-		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = int(i)
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var bitSize int
+		switch kind {
+		case reflect.Int:
+			bitSize = 0
+		case reflect.Int8:
+			bitSize = 8
+		case reflect.Int16:
+			bitSize = 16
+		case reflect.Int32:
+			bitSize = 32
+		case reflect.Int64:
+			bitSize = 64
 		}
-	case reflect.Int8:
-		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
+		if i, err := parseIntEx(repr, bitSize); err != nil {
+			return nil, str.newPackError("cannot convert value `" + repr + "` to type " + kind.String())
 		} else {
-			item = int8(i)
+			switch kind {
+			case reflect.Int:
+				item = int(i)
+			case reflect.Int8:
+				item = int8(i)
+			case reflect.Int16:
+				item = int16(i)
+			case reflect.Int32:
+				item = int32(i)
+			case reflect.Int64:
+				item = int64(i)
+			}
 		}
-	case reflect.Int16:
-		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		var bitSize int
+		switch kind {
+		case reflect.Uint:
+			bitSize = 0
+		case reflect.Uint8:
+			bitSize = 8
+		case reflect.Uint16:
+			bitSize = 16
+		case reflect.Uint32:
+			bitSize = 32
+		case reflect.Uint64:
+			bitSize = 64
+		}
+		if u, err := parseUintEx(repr, bitSize); err != nil {
+			return nil, str.newPackError("cannot convert value `" + repr + "` to type " + kind.String())
 		} else {
-			item = int16(i)
+			switch kind {
+			case reflect.Uint:
+				item = uint(u)
+			case reflect.Uint8:
+				item = uint8(u)
+			case reflect.Uint16:
+				item = uint16(u)
+			case reflect.Uint32:
+				item = uint32(u)
+			case reflect.Uint64:
+				item = uint64(u)
+			}
 		}
-	case reflect.Int32:
-		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = int32(i)
-		}
-	case reflect.Int64:
-		if i, err := strconv.Atoi(repr); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = int64(i)
-		}
-	case reflect.Uint:
-		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = uint(i)
-		}
-	case reflect.Uint8:
-		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = uint8(i)
-		}
-	case reflect.Uint16:
-		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = uint16(i)
-		}
-	case reflect.Uint32:
-		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = uint32(i)
-		}
-	case reflect.Uint64:
-		if i, err := strconv.ParseUint(repr, 10, 0); err != nil {
-			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
-		} else {
-			item = uint64(i)
-		}
+
 	case reflect.Float32:
 		if f, err := strconv.ParseFloat(repr, 32); err != nil {
 			return nil, str.newPackError("cannot convert value `" + str.String() + "` to type " + kind.String())
