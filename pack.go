@@ -72,7 +72,7 @@ func isScalarKind(kind reflect.Kind) bool {
 // Checks whether a kind represents a compound type.
 func isCompoundKind(kind reflect.Kind) bool {
 	switch kind {
-	case reflect.Array, reflect.Slice, reflect.Struct:
+	case reflect.Array, reflect.Slice, reflect.Struct, reflect.Map:
 		return true
 	default:
 		return false
@@ -211,6 +211,9 @@ func (node selfNode) packIntoField(name string, field reflect.Value) (err error)
 	} else if fieldKind == reflect.Struct {
 		return node.packToStruct(field)
 
+	} else if fieldKind == reflect.Array {
+		return node.packToArray(field)
+
 	} else if fieldKind == reflect.Slice {
 		return node.packToSlice(field)
 
@@ -272,6 +275,10 @@ func (node selfNode) makeValue(t reflect.Type) (value reflect.Value, err error) 
 	if isScalarKind(kind) {
 		err = node.newPackError("expected a string element for scalar field")
 
+	} else if kind == reflect.Array {
+		value = reflect.MakeSlice(t, t.Len(), t.Len())
+		err = node.packToArray(value)
+
 	} else if kind == reflect.Slice {
 		value = reflect.New(t).Elem()
 		err = node.packToSlice(value)
@@ -291,33 +298,78 @@ func (node selfNode) makeValue(t reflect.Type) (value reflect.Value, err error) 
 	return
 }
 
+// Check the header value for a compound type nested into a slice or array.
+func (node *selfNode) checkMetaHeader(elemType reflect.Type) error {
+
+	header := node.head.String()
+	kind := elemType.Kind()
+
+	if kind == reflect.Slice || kind == reflect.Array {
+		// Packing a slice of slices requires the [] (empty string) header.
+		if len(header) != 0 {
+			return node.head.newPackError("slice head has value `" + header + "` instead of []")
+		}
+
+	} else if kind == reflect.Struct || kind == reflect.Map {
+		// Packing a slice of structs or maps. Requires the type name as header or a bullet point.
+		if !isBulletPoint(header) && header != elemType.Name() {
+			return node.head.newPackError("struct head has value `" + header + "` instead of bullet or `" + elemType.Name() + "`")
+		}
+	}
+
+	return nil
+}
+
+// Packs a selfNode into a Go array.
+func (node *selfNode) packToArray(field reflect.Value) (err error) {
+
+	arraySize := field.Type().Len()
+	if len(node.values) > arraySize {
+		return node.newPackError(fmt.Sprintf("too many values to fit into array of %d elements", arraySize))
+	}
+
+	arrayType := field.Type().Elem()
+	arrayKind := arrayType.Kind()
+
+	for i, n := range node.values {
+
+		switch arrayKind {
+		case reflect.Slice, reflect.Array, reflect.Struct, reflect.Map:
+			if _, ok := n.(*selfNode); !ok {
+				return n.newPackError("compound kind `" + arrayKind.String() + "` expected a list of values")
+			}
+
+			subNode := n.(*selfNode)
+			if err = subNode.checkMetaHeader(arrayType); err != nil {
+				return
+			}
+		}
+
+		if err = n.packIntoField("", field.Index(i)); err != nil {
+			return
+		}
+	}
+
+	return
+}
+
 // Packs a selfNode into a Go slice.
-func (node selfNode) packToSlice(field reflect.Value) (err error) {
+func (node *selfNode) packToSlice(field reflect.Value) (err error) {
 	sliceType := field.Type().Elem()
 	sliceKind := sliceType.Kind()
 
 	var value reflect.Value
 	for _, n := range node.values {
 
-		if sliceKind == reflect.Slice {
-			// Packing a slice of slices requires the [] (empty string) header.
+		switch sliceKind {
+		case reflect.Slice, reflect.Array, reflect.Struct, reflect.Map:
 			if _, ok := n.(*selfNode); !ok {
-				return n.newPackError("slice type expected a list of values")
-			}
-			subNode := n.(*selfNode)
-			if len(subNode.head.String()) != 0 {
-				return subNode.head.newPackError("slice head has value `" + subNode.head.String() + "` instead of []")
+				return n.newPackError("compound kind `" + sliceKind.String() + "` expected a list of values")
 			}
 
-		} else if sliceKind == reflect.Struct || sliceKind == reflect.Map {
-			// Packing a slice of structs or maps. Requires the type name as header or a bullet point.
-			if _, ok := n.(*selfNode); !ok {
-				return n.newPackError("struct/map type expected a list of values")
-			}
 			subNode := n.(*selfNode)
-			subHead := subNode.head.String()
-			if !isBulletPoint(subHead) && subHead != sliceType.Name() {
-				return subNode.head.newPackError("struct head has value `" + subHead + "` instead of bullet or `" + sliceType.Name() + "`")
+			if err = subNode.checkMetaHeader(sliceType); err != nil {
+				return
 			}
 		}
 
@@ -333,7 +385,7 @@ func (node selfNode) packToSlice(field reflect.Value) (err error) {
 
 // Packs a selfNode into a Go map.
 // Values must be nodes as their heads are used as keys into the map.
-func (node selfNode) packToMap(m reflect.Value) (err error) {
+func (node *selfNode) packToMap(m reflect.Value) (err error) {
 
 	var (
 		key   interface{}
