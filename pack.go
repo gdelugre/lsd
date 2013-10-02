@@ -463,13 +463,18 @@ func (node *selfNode) packToStructByFieldOrder(st reflect.Value) (err error) {
 }
 
 // Packs a selfNode into a Go structure.
-// If the node only contains subnodes, consider filling each field by name.
+// If the node only contains subnodes and their heads match field names, consider filling each field by name.
 func (node *selfNode) packToStruct(st reflect.Value) error {
 
 	for _, n := range node.values {
 		switch n.(type) {
 		case selfString:
 			return node.packToStructByFieldOrder(st)
+
+		case *selfNode:
+			if !st.FieldByName(n.(*selfNode).head.String()).IsValid() {
+				return node.packToStructByFieldOrder(st)
+			}
 		}
 	}
 	return node.packToStructByFieldName(st)
