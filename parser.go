@@ -87,8 +87,8 @@ func (s selfString) String() string {
 func (s selfString) Dump(_ int) string {
 	if len(s.str) == 0 {
 		return "[]"
-	} else if strings.ContainsAny(s.str, whiteSpaces+"`#;([])") {
-		return "`" + strings.Replace(s.str, "`", "``", -1) + "`"
+	} else if strings.ContainsAny(s.str, whiteSpaces+"`\"#;([])") {
+		return "\"" + strings.Replace(s.str, "\"", "\"\"", -1) + "\""
 	} else {
 		return s.str
 	}
@@ -194,9 +194,9 @@ func (p *selfParser) skipSpaces() {
 	}
 }
 
-// Parses a string value enclosed by '`' delimitors.
-// Double backticks are escaped as a single one.
-func (p *selfParser) parseBacktickString() (selfString, error) {
+// Parses a string value enclosed by a single rune delimitor.
+// Delimitors must be doubled to be escaped inside the string.
+func (p *selfParser) parseDelimitorString(delim rune) (selfString, error) {
 	var (
 		str     string = ""
 		prev    rune   = -1
@@ -204,14 +204,16 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 	)
 
 	for !p.eod {
-		if p.r != '`' && prev == '`' {
+		if p.r != delim && prev == delim {
 			break
 		}
 
-		if p.r == '`' {
-			if prev == '`' {
-				str += "`"
+		if p.r == delim {
+			if prev == delim {
+				str += string(delim)
 				prev = -1
+				p.next()
+				continue
 			}
 		} else {
 			str += string(p.r)
@@ -226,6 +228,16 @@ func (p *selfParser) parseBacktickString() (selfString, error) {
 	} else {
 		return selfString{str: str, lineNumber: lineNum}, nil
 	}
+}
+
+// Parses a string value enclosed by '`' delimitors.
+func (p *selfParser) parseBacktickString() (selfString, error) {
+	return p.parseDelimitorString('`')
+}
+
+// Parses a string value enclosed by '"' delimitors.
+func (p *selfParser) parseQuotedString() (selfString, error) {
+	return p.parseDelimitorString('"')
 }
 
 // Parses a string enclosed into brackets.
@@ -271,6 +283,9 @@ func (p *selfParser) parseString() (selfString, error) {
 	case '`':
 		p.next()
 		return p.parseBacktickString()
+	case '"':
+		p.next()
+		return p.parseQuotedString()
 	case '[':
 		p.next()
 		return p.parseBracketedString()
@@ -325,7 +340,7 @@ func (p *selfParser) parseNode() (node *selfNode, err error) {
 
 	p.skipSpaces()
 	if p.r != sexprOpen {
-		return nil, p.newError("expected `(` rune at start of list")
+		return nil, p.newError("expected `(` token at start of list")
 	}
 	p.next()
 
