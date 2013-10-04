@@ -1,13 +1,15 @@
-What is self-ml ?
+What is LSD ?
 -----------------
 
-**self-ml** is a data serialization format based on Lisp s-expressions. It
-is similar to YAML or JSON but with a simpler and more minimalist syntax.
+**LSD** (for *Lisp Structured Data*) is a data serialization format based on
+Lisp s-expressions. It is similar to YAML or JSON but offers a simpler and more
+minimalist syntax.
 
-It was first designed and described on this `blog
-<http://chocolatapp.com/blog/self-ml>`_. The following implementation is mainly
-based on this reference with some extensions of my own, most notably the
-support to make it fit into a typing system.
+LSD is strongly inspired by self-ml, which was first designed and described on
+the `blog of the Chocolat text editor <http://chocolatapp.com/blog/self-ml>`_.
+The following implementation is mainly based on this reference with some
+extensions of my own, like a few syntactic changes and some conventions to make
+it fit into a type system.
 
 
 Installing
@@ -17,7 +19,7 @@ Setup your ``GOPATH`` environment variable (e.g. ``export GOPATH=$HOME/.go``), t
 
 .. code-block:: bash
 
-    $ go get github.com/gdelugre/selfml
+    $ go get github.com/gdelugre/lsd
 
 
 Usage
@@ -25,7 +27,7 @@ Usage
 
 .. code-block:: go
 
-    import "github.com/gdelugre/selfml"
+    import "github.com/gdelugre/lsd"
 
     type ConfigExample struct {
         Foo     string 
@@ -38,9 +40,9 @@ Usage
         // Initialize structure with default values.
         conf = ConfigExample{...}
 
-        // Use selfml.LoadFile to read a file or selfml.LoadString
-        // to parse directly from a string.
-        if err := selfml.LoadFile("example.selfml", &conf); !err {
+        // Use lsd.Load to read a file or lsd.LoadString
+        // to parse directly from an existing string.
+        if err := lsd.Load("example.lsd", &conf); !err {
 
             // Structure successfully loaded from file.
             // ...
@@ -51,7 +53,7 @@ Usage
 Syntax
 ------
 
-**self-ml** syntax is based on `s-expressions
+**LSD** syntax is based on `s-expressions
 <https://en.wikipedia.org/wiki/S-expression>`_ from Lisp, keeping it very light
 and simple. This makes it particularly adapted to represent simple
 human-readable structures like lists of values or key-value stores.
@@ -67,7 +69,7 @@ Let's look for example at this simplified configuration file of an OpenSSH daemo
     PermitRootLogin no
 
 
-Here is its counterpart in self-ml:
+Here is its counterpart in LSD:
 
 .. code-block:: scheme
 
@@ -92,7 +94,7 @@ This example is only composed of key and values. Once parsed it can automaticall
 Description
 ^^^^^^^^^^^
 
-**self-ml** only recognizes two types of constructs: lists and strings. A
+Like self-ml, LSD only recognizes two types of constructs: lists and strings. A
 string is a list of UTF-8 characters and a list is a sequence of other lists or
 strings. Lists are enclosed by characters ``(`` and ``)``, and their values are
 separated by white spaces.
@@ -104,19 +106,19 @@ result, empty lists are not permitted.
 
     (MyList this is list (containing (nested lists)) !)
 
-From the language point of view, self-ml does not have notion for integers,
+From the language point of view, LSD does not have notion for integers,
 booleans or maps as only strings and lists exist. Type checking is nonetheless
 present when values are converted into the programming language types (in that
 case, Go).
 
-As a result, self-ml only focuses on the *structure* of the data and leaves out
-the types definition to the reader, allowing it to have a very clean,
+As a result, LSD only focuses on the *structure* of the data and leaves out
+the types definition to the reader, allowing it to have a very neat,
 uncluttered syntax.
 
 Comments
 ^^^^^^^^
 
-This implementation slightly differs from `the original
+This implementation differs from `the original self-ml
 reference <http://chocolatapp.com/blog/self-ml>`_ as how comments are
 represented.  Comments start with a character ``#`` and expands to the end of
 the line. To be compatible with most Lisp dialects, the comment character ``;``
@@ -225,7 +227,7 @@ If you want to define it by field order, then simply put the values in the order
 
 Any structure can be constructed by name or by order. The only exception is the
 root structure that must be created using field names (which correspond to
-top-level list definitions in a self-ml document).
+top-level list definitions in a LSD document).
 
 Maps
 ^^^^
@@ -234,7 +236,7 @@ Maps are key-value dictionaries in Go. They can be defined in the same fashion
 we define a structure by its fields name. Unlike structs, the keys can be of
 any value as long as they can be converted into their Go native type.
 
-Since list heads must be defined as string values in self-ml, the key type of
+Since list heads must be defined as string values in LSD, the key type of
 the map *must not* be of a compound-type (like struct, map or slice).
 
 .. code-block:: scheme
@@ -259,7 +261,7 @@ Slices are variable-length arrays and are naturally represented by lists:
 Arrays follow the same convention with the additional constraint that the
 number of values must not overflow the length of the array.
 
-Since self-ml only allows to define strings for list heads, one problem may
+Since LSD only allows to define strings for list heads, one problem may
 arise you try to create a list of a compound type. If you define a slice of
 slices, you can define an empty string for the sub-list head. The recommended
 notation is ``[]``, which is self-talkative for a list:
@@ -273,7 +275,7 @@ notation is ``[]``, which is self-talkative for a list:
         ([] 3.43 1.11 4.85)
     )
 
-Another possibility is to use a *bullet point* to mark the beginning of the
+Another possibility is to use a **bullet point** to mark the beginning of the
 list.  The allowed bullets are: ``-``,  ``*``, ``•`` (U+2022), ``‣`` (U+2023),
 ``⁃`` (U+2043) and ``◦`` (U+25E6).
 
@@ -292,7 +294,7 @@ Consider the following declaration in Go:
         Users []User
     }
 
-Here is the definition is self-ml:
+Here is the definition is LSD:
 
 .. code-block:: scheme
 
@@ -302,13 +304,13 @@ Here is the definition is self-ml:
         (‣ (UserName Josh) (Age 32) (Email josh@example.com) (Admin false)) 
     )
 
-Example
--------
+Example of a LSD file
+---------------------
 
 .. code-block:: scheme
 
     ;
-    ; Simple init script in self-ml.
+    ; Simple init script in LSD.
     ;
 
     ; Generic description.
