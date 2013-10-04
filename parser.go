@@ -87,7 +87,7 @@ func (s selfString) String() string {
 func (s selfString) Dump(_ int) string {
 	if len(s.str) == 0 {
 		return "[]"
-	} else if strings.ContainsAny(s.str, whiteSpaces+"`\"#;([])") {
+	} else if strings.ContainsAny(s.str, whiteSpaces+"\"#;([])") {
 		return "\"" + strings.Replace(s.str, "\"", "\"\"", -1) + "\""
 	} else {
 		return s.str
@@ -194,50 +194,61 @@ func (p *selfParser) skipSpaces() {
 	}
 }
 
-// Parses a string value enclosed by a single rune delimitor.
-// Delimitors must be doubled to be escaped inside the string.
-func (p *selfParser) parseDelimitorString(delim rune) (selfString, error) {
+// Parses a string value enclosed by a pair of double quotes.
+// Unescapes the following sequences: \r, \t, \n, \f, \\, \".
+func (p *selfParser) parseEscapedString() (selfString, error) {
+
 	var (
 		str     string = ""
-		prev    rune   = -1
+		escape  bool   = false
 		lineNum uint   = p.lineNumber
 	)
 
 	for !p.eod {
-		if p.r != delim && prev == delim {
+		if escape {
+			switch p.r {
+			case '\\':
+				str += "\\"
+			case 'f':
+				str += "\f"
+			case 'r':
+				str += "\r"
+			case 't':
+				str += "\t"
+			case 'n':
+				str += "\n"
+			case '"':
+				str += "\""
+			default:
+				return selfString{}, p.newErrorAtLine("invalid escape sequence '\\"+string(p.r)+"'", lineNum)
+			}
+
+			escape = false
+			p.next()
+			continue
+		}
+
+		if p.r == '"' {
+			p.next()
 			break
 		}
 
-		if p.r == delim {
-			if prev == delim {
-				str += string(delim)
-				prev = -1
-				p.next()
-				continue
-			}
+		if p.r == '\\' {
+			escape = true
 		} else {
 			str += string(p.r)
 		}
 
-		prev = p.r
 		p.next()
 	}
+
+	println(str)
 
 	if p.eod {
 		return selfString{}, p.newErrorAtLine("unexpected end of data while parsing string", lineNum)
 	} else {
 		return selfString{str: str, lineNumber: lineNum}, nil
 	}
-}
-
-// Parses a string value enclosed by '`' delimitors.
-func (p *selfParser) parseBacktickString() (selfString, error) {
-	return p.parseDelimitorString('`')
-}
-
-// Parses a string value enclosed by '"' delimitors.
-func (p *selfParser) parseQuotedString() (selfString, error) {
-	return p.parseDelimitorString('"')
 }
 
 // Parses a string enclosed into brackets.
@@ -280,12 +291,9 @@ func (p *selfParser) parseString() (selfString, error) {
 	}
 
 	switch p.r {
-	case '`':
-		p.next()
-		return p.parseBacktickString()
 	case '"':
 		p.next()
-		return p.parseQuotedString()
+		return p.parseEscapedString()
 	case '[':
 		p.next()
 		return p.parseBracketedString()

@@ -156,18 +156,22 @@ Strings may need to contain white spaces or special characters like ``(``,
 
   Strings are enclosed between ``"`` (double quote) characters, and everything
   between those delimitors is part of the string. If the string also contains
-  ``"`` characters, those must be doubled. Backticks (`````) can also be used
-  in place of double quotes.
+  ``"`` characters, they must be escaped by preceding them with the special
+  character ``\``.
+
+  The allowed escaped sequences are: ``\"``, ``\\``, ``\f``, ``\r``, ``\n`` and ``\t``.
 
   .. code-block:: scheme
 
-    (Description "This is a long ""string"" with whitespaces")
+    (Description "This is a long \"string\" with whitespaces")
 
 * Bracketed strings
 
   Strings are enclosed between ``[`` and ``]`` and everything between brackets
   is part of the string. The string can also contain brackets as long as they
   are balanced.
+
+  This syntax does not support escape sequences.
 
   .. code-block:: scheme
 
